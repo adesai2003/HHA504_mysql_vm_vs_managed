@@ -6,74 +6,64 @@
 # Env vars (populate a local .env):
 #   VM_DB_HOST, VM_DB_PORT, VM_DB_USER, VM_DB_PASS, VM_DB_NAME
 
-import os
-import time
-import sys
+import os, time
 from datetime import datetime
 import pandas as pd
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
-# --- 0) Load environment and Validate (FIXED FOR ROBUSTNESS) ---
-# NOTE: The path is set to look for .env in the current directory for better portability.
-# Ensure your .env file is in the same directory you run the script from!
+# --- 0) Load environment ---
+# IMPORTANT: Adjust this path to wherever your .env file is located
 load_dotenv(".env")
 
-VM_DB_HOST = os.getenv("VM_DV_HOST", "35.184.55.201")
+VM_DB_HOST = os.getenv("VM_DB_HOST")
 VM_DB_PORT = os.getenv("VM_DB_PORT", "3306")
-VM_DB_USER = os.getenv("VM_DV_USER", "aaravdb")
-VM_DB_PASS = os.getenv("VM_DB_PASS", "StonyBrook")
-VM_DB_NAME = os.getenv("VM_DB_NAME", "class_db_aarav2003")
+VM_DB_USER = os.getenv("VM_DB_USER")
+VM_DB_PASS = os.getenv("VM_DB_PASS")
+VM_DB_NAME = os.getenv("VM_DB_NAME")
 
 print("[ENV] VM_DB_HOST:", VM_DB_HOST)
 print("[ENV] VM_DB_PORT:", VM_DB_PORT)
 print("[ENV] VM_DB_USER:", VM_DB_USER)
 print("[ENV] VM_DB_NAME:", VM_DB_NAME)
 
-# CRITICAL CHECK: Exit if host is missing (prevents immediate crash if .env fails)
-if not VM_DB_HOST or not VM_DB_USER or not VM_DB_PASS or not VM_DB_NAME:
-    print("\n[ERROR] Missing one or more required environment variables (VM_DB_HOST, VM_DB_USER, VM_DB_PASS, VM_DB_NAME).")
-    print("        Please check your .env file for correct casing and values.")
-    sys.exit(1)
-
-
 # --- 1) Connect to server (no DB) and ensure database exists ---
-# Construct the server URL. Note: We do not include VM_DB_NAME here.
-server_url = f"mysql+pymysql://{VM_DB_USER}:{VM_DB_PASS}@{VM_DB_HOST}:{VM_DB_PORT}/?ssl=false"
-
-# Mask password in output for security
-masked_url = server_url.replace(VM_DB_PASS, "*****") 
-
-print("\n" + "="*50)
-print(f"[STEP 1] Connecting to MySQL VM ({VM_DB_HOST}): {masked_url}")
 t0 = time.time()
 
+# 1.1) Construct the URL without any non-standard SSL parameters
+# The database driver (pymysql) will default to no SSL if no configuration is provided.
+server_url_no_db = f"mysql+pymysql://{VM_DB_USER}:{VM_DB_PASS}@{VM_DB_HOST}:{VM_DB_PORT}/"
+masked_url = server_url_no_db
+if VM_DB_PASS:
+    masked_url = server_url_no_db.replace(VM_DB_PASS, "*****")
+print("[STEP 1] Connecting to MySQL server (no DB):", masked_url)
+
+# 1.2) Create the engine. We removed the incorrect connect_args.
+engine_server = create_engine(
+    server_url_no_db,
+    pool_pre_ping=True
+)
+
 try:
-    # Use pool_pre_ping for connection testing, removed redundant connect_args
-    engine_server = create_engine(server_url, pool_pre_ping=True)
-    
     with engine_server.connect() as conn:
-        # Check if the connection works and create the database
+        # Create database command
         conn.execute(text(f"CREATE DATABASE IF NOT EXISTS `{VM_DB_NAME}`"))
         conn.commit()
     print(f"[OK] Ensured database `{VM_DB_NAME}` exists.")
-
 except Exception as e:
-    print("\n[CRITICAL ERROR] Failed to connect to VM MySQL Server in Step 1.")
-    print("Please check the following:")
-    print("1. Firewall: Is tcp:3306 open to your current public IP address?")
-    print("2. VM Config: Is 'bind-address = 0.0.0.0' set in /etc/mysql/mysql.conf.d/mysqld.cnf?")
-    print("3. Credentials: Are VM_DB_USER and VM_DB_PASS correct in .env?")
-    print(f"Details: {e}")
-    sys.exit(1)
+    print(f"[ERROR] Failed to connect or create database. Check VM status and credentials: {e}")
+    # Exit if connection fails here, as subsequent steps will fail too.
+    exit(1)
+finally:
+    # Always dispose the engine to clean up connections
+    engine_server.dispose()
 
 
 # --- 2) Connect to the target database ---
-# Construct the database URL, including the database name
-db_url = f"mysql+pymysql://{VM_DB_USER}:{VM_DB_PASS}@{VM_DB_HOST}:{VM_DB_PORT}/{VM_DB_NAME}?ssl=false"
+# 2.1) Construct the target DB URL, also without non-standard SSL parameters
+db_url = f"mysql+pymysql://{VM_DB_USER}:{VM_DB_PASS}@{VM_DB_HOST}:{VM_DB_PORT}/{VM_DB_NAME}"
 engine = create_engine(db_url)
-print(f"[STEP 2] Successfully connected to database: {VM_DB_NAME}")
-
+print(f"[STEP 2] Engine created for database: {VM_DB_NAME}")
 
 # --- 3) Create a DataFrame and write to a table ---
 table_name = "visits"
@@ -87,14 +77,21 @@ df = pd.DataFrame(
     ]
 )
 
-# Write the DataFrame to the database
-# Removed unnecessary connect_args
+# 3.1) Write the DataFrame. Removed the invalid connect_args argument.
+print(f"[STEP 3] Writing {len(df)} rows to table `{table_name}`...")
 df.to_sql(table_name, con=engine, if_exists="replace", index=False)
-print(f"[STEP 3] Successfully wrote 5 records to table `{table_name}`.")
-
+print(f"[OK] Table `{table_name}` created and populated.")
 
 # --- 4) Read back a quick check ---
-print("[STEP 4] Reading back row count to verify data...")
-with engine.connect() as conn:
-    count_df = pd.read_sql(f"SELECT COUNT(*) AS n_rows FROM `{table_name}`", con=conn)
-print(count_df)
+print("[STEP 4] Reading back row count ...")
+try:
+    with engine.connect() as conn:
+        count_df = pd.read_sql(f"SELECT COUNT(*) AS n_rows FROM `{table_name}`", con=conn)
+    print("Row count read successfully:")
+    print(count_df)
+except Exception as e:
+    print(f"[ERROR] Failed to read from table: {e}")
+
+
+elapsed = time.time() - t0
+print(f"\n[DONE] VM path completed in {elapsed:.1f}s at {datetime.utcnow().isoformat()}Z")

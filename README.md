@@ -35,8 +35,33 @@ Secrets are stored in a local, untracked file named **`.env`** at the root of th
 
 ### Screenshots Summary and Links
 
-* **screenshots/vm/**: VM creation page, Firewall rule, `systemctl status mysql` output, MySQL CLI session showing `SHOW DATABASES;`.
-* **screenshots/managed/**: Cloud SQL instance Overview, Connection settings (Authorized networks), and Users list.
+* **screenshots/vm/**: 
+VM creation page, 
+![VMCreated](screenshots/vm/vm_created.png)
+
+Firewall rule, `systemctl status mysql` 
+![fireallrule](screenshots/vm/fireall_rule_created.png)
+
+output, 
+![tablesxist](screenshots/vm/tables.png)
+
+MySQL CLI session showing `SHOW DATABASES;`.
+![GCP create](screenshots/vm/tables.png)
 
 
-* **Video Link:** `<INSERT_YOUR_ZOOM/LOOM_LINK_HERE>`
+* **screenshots/managed/**: 
+
+Cloud SQL 
+![creation](screenshots/managed/creation.png)
+
+instance Overview, 
+![instance](screenshots/managed/connection.png)
+
+Connection settings (Authorized networks), 
+![conncection](screenshots/managed/netork.png)
+
+
+and Users list.
+![users](screenshots/managed/connection.png)
+
+* **Video Link:** `<https://www.loom.com/share/fdceaa1a49b7464b8a33d1d96c645e4d>`

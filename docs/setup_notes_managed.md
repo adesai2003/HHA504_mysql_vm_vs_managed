@@ -1,4 +1,4 @@
-* **Name:** 
+* **Name:** mysql-managed-club
 * **Region/Zone:** us-central1 (Single Zone)
 * **Database Version:** MySQL 8.0
 * **Machine Type:** db-f1-micro (Shared-core, 0.6 GB RAM)
